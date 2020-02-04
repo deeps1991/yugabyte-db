@@ -1295,8 +1295,6 @@ drop table my_table;
 -- Verify cases that are unsupported with partitioned tables
 --
 create table parted_trig (a int) partition by list (a);
--- TODO When/if (PG-style) partitioned tables are supported in YB enabled the tests below.
-/*
 create function trigger_nothing() returns trigger
   language plpgsql as $$ begin end; $$;
 create trigger failed before insert or update or delete on parted_trig
@@ -1311,11 +1309,12 @@ drop table parted_trig;
 --
 -- Verify trigger creation for partitioned tables, and drop behavior
 --
+/*
 create table trigpart (a int, b int) partition by range (a);
 create table trigpart1 partition of trigpart for values from (0) to (1000);
 create trigger trg1 after insert on trigpart for each row execute procedure trigger_nothing();
 create table trigpart2 partition of trigpart for values from (1000) to (2000);
-create table trigpart3 (like trigpart);
+create table trigpart3 (a int, b int);
 alter table trigpart attach partition trigpart3 for values from (2000) to (3000);
 select tgrelid::regclass, tgname, tgfoid::regproc from pg_trigger
   where tgrelid::regclass::text like 'trigpart%' order by tgrelid::regclass::text;
@@ -1499,6 +1498,8 @@ alter table parted_constr attach partition parted1_constr
 create constraint trigger parted_trig after insert on parted_constr_ancestor
   deferrable
   for each row execute procedure trigger_notice_ab();
+/*
+Enable below tests when deferred constraints are supported.
 create constraint trigger parted_trig_two after insert on parted_constr
   deferrable initially deferred
   for each row when (bark(new.b) AND new.a % 2 = 1)
@@ -1520,9 +1521,9 @@ set constraints parted_trig deferred;
 insert into parted_constr values (1, 'aardvark');
 insert into parted1_constr values (2, 'aardwolf'), (3, 'aasvogel');
 commit;
+
 drop table parted_constr_ancestor;
 drop function bark(text);
-
 -- Test that the WHEN clause is set properly to partitions
 create table parted_trigger (a int, b text) partition by range (a);
 create table parted_trigger_1 partition of parted_trigger for values from (0) to (1000);
@@ -1553,6 +1554,8 @@ alter table parted_trigger attach partition parted_trigger_2 for values from (10
 create constraint trigger parted_trigger after update on parted_trigger
   from parted_referenced
   for each row execute procedure trigger_notice_ab();
+
+Enable below tests when create constraint trigger is supported.
 create constraint trigger parted_trigger after update on unparted_trigger
   from parted_referenced
   for each row execute procedure trigger_notice_ab();
@@ -1565,6 +1568,7 @@ select tgname, conname, t.tgrelid::regclass, t.tgconstrrelid::regclass,
   from pg_trigger t join pg_constraint c on (t.tgconstraint = c.oid)
   where tgname = 'parted_trigger'
   order by t.tgrelid::regclass::text;
+
 drop table parted_referenced, parted_trigger, unparted_trigger;
 
 -- verify that the "AFTER UPDATE OF columns" event is propagated correctly
@@ -1591,6 +1595,8 @@ drop function trigger_notice_ab();
 create table trg_clone (a int) partition by range (a);
 create table trg_clone1 partition of trg_clone for values from (0) to (1000);
 alter table trg_clone add constraint uniq unique (a) deferrable;
+
+Enable below tests when deferrable constraints are supported.
 create table trg_clone2 partition of trg_clone for values from (1000) to (2000);
 create table trg_clone3 partition of trg_clone for values from (2000) to (3000)
   partition by range (a);
@@ -1599,6 +1605,7 @@ select tgrelid::regclass, count(*) from pg_trigger
   where tgrelid::regclass in ('trg_clone', 'trg_clone1', 'trg_clone2',
 	'trg_clone3', 'trg_clone_3_3')
   group by tgrelid::regclass order by tgrelid::regclass;
+
 drop table trg_clone;
 
 --
@@ -1607,7 +1614,7 @@ drop table trg_clone;
 -- format that shows the attribute order, so that we can distinguish
 -- tuple formats (though not dropped attributes).
 --
-*/
+
 
 -- Let these function be created since they are also used in other tests.
 create or replace function dump_insert() returns trigger language plpgsql as
@@ -1641,8 +1648,6 @@ $$
   end;
 $$;
 
--- Continue skipped partition tests (TODO to be enabled when PG-style partition tables are supported).
-/*
 --
 -- Verify behavior of statement triggers on partition hierarchy with
 -- transition tables.  Tuples should appear to each trigger in the
@@ -1667,13 +1672,14 @@ alter table parent attach partition child3 for values in ('CCC');
 create trigger parent_insert_trig
   after insert on parent referencing new table as new_table
   for each statement execute procedure dump_insert();
+/*
+Enable below tests when transition tables are supported.
 create trigger parent_update_trig
   after update on parent referencing old table as old_table new table as new_table
   for each statement execute procedure dump_update();
 create trigger parent_delete_trig
   after delete on parent referencing old table as old_table
   for each statement execute procedure dump_delete();
-
 create trigger child1_insert_trig
   after insert on child1 referencing new table as new_table
   for each statement execute procedure dump_insert();
@@ -1683,7 +1689,6 @@ create trigger child1_update_trig
 create trigger child1_delete_trig
   after delete on child1 referencing old table as old_table
   for each statement execute procedure dump_delete();
-
 create trigger child2_insert_trig
   after insert on child2 referencing new table as new_table
   for each statement execute procedure dump_insert();
@@ -1693,7 +1698,6 @@ create trigger child2_update_trig
 create trigger child2_delete_trig
   after delete on child2 referencing old table as old_table
   for each statement execute procedure dump_delete();
-
 create trigger child3_insert_trig
   after insert on child3 referencing new table as new_table
   for each statement execute procedure dump_insert();
@@ -1703,42 +1707,34 @@ create trigger child3_update_trig
 create trigger child3_delete_trig
   after delete on child3 referencing old table as old_table
   for each statement execute procedure dump_delete();
-
 SELECT trigger_name, event_manipulation, event_object_schema, event_object_table,
        action_order, action_condition, action_orientation, action_timing,
        action_reference_old_table, action_reference_new_table
   FROM information_schema.triggers
   WHERE event_object_table IN ('parent', 'child1', 'child2', 'child3')
   ORDER BY trigger_name COLLATE "C", 2;
-
 -- insert directly into children sees respective child-format tuples
 insert into child1 values ('AAA', 42);
 insert into child2 values ('BBB', 42);
 insert into child3 values (42, 'CCC');
-
 -- update via parent sees parent-format tuples
 update parent set b = b + 1;
-
 -- delete via parent sees parent-format tuples
 delete from parent;
-
 -- insert into parent sees parent-format tuples
 insert into parent values ('AAA', 42);
 insert into parent values ('BBB', 42);
 insert into parent values ('CCC', 42);
-
 -- delete from children sees respective child-format tuples
 delete from child1;
 delete from child2;
 delete from child3;
-
 -- copy into parent sees parent-format tuples
 copy parent (a, b) from stdin;
 AAA	42
 BBB	42
 CCC	42
 \.
-
 -- DML affecting parent sees tuples collected from children even if
 -- there is no transition table trigger on the children
 drop trigger child1_insert_trig on child1;
@@ -1751,7 +1747,6 @@ drop trigger child3_insert_trig on child3;
 drop trigger child3_update_trig on child3;
 drop trigger child3_delete_trig on child3;
 delete from parent;
-
 -- copy into parent sees tuples collected from children even if there
 -- is no transition-table trigger on the children
 copy parent (a, b) from stdin;
@@ -1759,7 +1754,6 @@ AAA	42
 BBB	42
 CCC	42
 \.
-
 -- insert into parent with a before trigger on a child tuple before
 -- insertion, and we capture the newly modified row in parent format
 create or replace function intercept_insert() returns trigger language plpgsql as
@@ -1773,49 +1767,37 @@ $$;
 create trigger intercept_insert_child3
   before insert on child3
   for each row execute procedure intercept_insert();
-
-
 -- insert, parent trigger sees post-modification parent-format tuple
 insert into parent values ('AAA', 42), ('BBB', 42), ('CCC', 66);
-
 -- copy, parent trigger sees post-modification parent-format tuple
 copy parent (a, b) from stdin;
 AAA	42
 BBB	42
 CCC	234
 \.
-
 drop table child1, child2, child3, parent;
 drop function intercept_insert();
-
 --
 -- Verify prohibition of row triggers with transition triggers on
 -- partitions
 --
 create table parent (a text, b int) partition by list (a);
 create table child partition of parent for values in ('AAA');
-
 -- adding row trigger with transition table fails
 create trigger child_row_trig
   after insert on child referencing new table as new_table
   for each row execute procedure dump_insert();
-
 -- detaching it first works
 alter table parent detach partition child;
-
 create trigger child_row_trig
   after insert on child referencing new table as new_table
   for each row execute procedure dump_insert();
-
 -- but now we're not allowed to reattach it
 alter table parent attach partition child for values in ('AAA');
-
 -- drop the trigger, and now we're allowed to attach it again
 drop trigger child_row_trig on child;
 alter table parent attach partition child for values in ('AAA');
-
 drop table child, parent;
-
 --
 -- Verify behavior of statement triggers on (non-partition)
 -- inheritance hierarchy with transition tables; similar to the
@@ -1954,7 +1936,6 @@ drop trigger child_row_trig on child;
 alter table child inherit parent;
 
 drop table child, parent;
-*/
 
 --
 -- Verify behavior of queries with wCTEs, where multiple transition
@@ -1969,7 +1950,7 @@ create trigger table1_trig
   for each statement execute procedure dump_insert();
 
 -- TODO When transition tables ('REFERENCING' clause) are supported in YB enable the tests below.
-/*
+
 create trigger table2_trig
   after insert on table2 referencing new table as new_table
   for each statement execute procedure dump_insert();
