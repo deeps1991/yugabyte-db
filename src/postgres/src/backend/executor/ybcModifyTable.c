@@ -631,6 +631,8 @@ bool YBCExecuteUpdate(Relation rel,
 					  ModifyTableState *mtstate,
 					  Bitmapset *updatedCols)
 {
+
+    ereport(INFO,(errmsg("YBCExecuteUpdate called on table %s", RelationGetRelationName(rel))));
 	TupleDesc      tupleDesc      = slot->tts_tupleDescriptor;
 	Oid            dboid          = YBCGetDatabaseOid(rel);
 	Oid            relid          = RelationGetRelid(rel);
@@ -693,13 +695,17 @@ bool YBCExecuteUpdate(Relation rel,
 		int32_t type_mod = att_desc->atttypmod;
 
 		/* Skip virtual (system) and dropped columns */
-		if (!IsRealYBColumn(rel, attnum))
+		if (!IsRealYBColumn(rel, attnum)) {
+            ereport(INFO,(errmsg("Skipping system column")));
 			continue;
+        }
 
 		/* Skip unmodified columns */
 		int bms_idx = attnum - YBGetFirstLowInvalidAttributeNumber(rel);
-		if (!whole_row && !bms_is_member(bms_idx, updatedCols) && !has_default)
+		if (!whole_row && !bms_is_member(bms_idx, updatedCols) && !has_default) {
+            ereport(INFO,(errmsg("Skipping unmodified column")));
 			continue;
+        }
 
 		/* Assign this attr's value, handle expression pushdown if needed. */
 		if (pushdown_lc != NULL &&
@@ -722,6 +728,7 @@ bool YBCExecuteUpdate(Relation rel,
 			YBCPgExpr ybc_expr = YBCNewConstant(update_stmt, type_id,
 												d, is_null);
 
+            ereport(INFO,(errmsg("Actually assigning column")));
 			HandleYBStmtStatus(YBCPgDmlAssignColumn(update_stmt, attnum, ybc_expr), update_stmt);
 		}
 	}
@@ -729,6 +736,8 @@ bool YBCExecuteUpdate(Relation rel,
 	/* Execute the statement. */
 	int rows_affected_count = 0;
 	YBCExecWriteStmt(update_stmt, rel, isSingleRow ? &rows_affected_count : NULL);
+
+    ereport(INFO,(errmsg("Rows affected:%d",rows_affected_count)));
 
 	/* Cleanup. */
 	HandleYBStatus(YBCPgDeleteStatement(update_stmt));

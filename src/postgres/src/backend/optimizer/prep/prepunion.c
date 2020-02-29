@@ -52,7 +52,6 @@
 #include "utils/rel.h"
 #include "utils/selfuncs.h"
 
-
 typedef struct
 {
 	PlannerInfo *root;
@@ -1994,6 +1993,8 @@ make_inh_translation_list(Relation oldrelation, Relation newrelation,
  * query is really only going to reference the inherited columns.  Instead
  * we set the per-column bits for all inherited columns.
  */
+
+/* DEEPTHI FIX ME */
 static Bitmapset *
 translate_col_privs(const Bitmapset *parent_privs,
 					List *translated_vars)
