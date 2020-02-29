@@ -1503,8 +1503,10 @@ Status Tablet::HandlePgsqlReadRequest(
           transaction_metadata,
           table_info->schema.table_properties().is_ysql_catalog_table());
   RETURN_NOT_OK(txn_op_ctx);
-  return AbstractTablet::HandlePgsqlReadRequest(
+  Status x =  AbstractTablet::HandlePgsqlReadRequest(
       deadline, read_time, pgsql_read_request, *txn_op_ctx, result);
+  LOG(INFO) << pgsql_read_request.DebugString() << "\n" << result->response.DebugString();
+  return x;
 }
 
 // Returns true if the query can be satisfied by rows present in current tablet.
